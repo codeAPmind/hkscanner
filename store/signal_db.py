@@ -30,6 +30,32 @@ class SignalDB:
         ).fetchone()[0]
         return count == 0
 
+    def latest_scan_before(self, today: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT MAX(scan_date) FROM signals WHERE scan_date < ?",
+            (today,),
+        ).fetchone()
+        return row[0] if row and row[0] else None
+
+    def signals_on(self, scan_date: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT code, name, scan_date, score, stage, change_rate, vol_ratio "
+            "FROM signals WHERE scan_date=? ORDER BY score DESC",
+            (scan_date,),
+        ).fetchall()
+        return [
+            {
+                "code": r[0],
+                "name": r[1] or r[0],
+                "scan_date": r[2],
+                "score": r[3],
+                "stage": r[4],
+                "change": r[5],
+                "vol_ratio": r[6],
+            }
+            for r in rows
+        ]
+
     def save(self, results: list, scan_date: str):
         rows = [
             (r['code'], r.get('name'), scan_date, r['score'],

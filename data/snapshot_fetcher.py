@@ -42,7 +42,9 @@ def initial_filter(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 
     df = df[df['suspension'] == False].copy()
     df = df[df['total_market_val'] >= cfg['min_market_cap']]
+    df = df[df['total_market_val'] <  cfg['max_market_cap']]
     df = df[df['change_rate']      >= cfg['min_change_rate']]
+    df = df[df['volume_ratio']     >= cfg['min_vol_ratio']]
     df = df[df['volume_ratio']     <= cfg['max_vol_ratio']]
 
     # 52周回撤必须足够深（说明经历过真实洗盘）

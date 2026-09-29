@@ -51,6 +51,10 @@ async def run_full_scan():
         if pat['score'] < FILTER_CONFIG['min_score']:
             continue
 
+        # 10 日持仓假设：冷却期内同一标的不再推，避免把一波行情算成多笔
+        if not db.is_new_signal(code, FILTER_CONFIG['signal_cooldown_days']):
+            continue
+
         r = {
             "code":        code,
             "name":        snap.get('name', code),
@@ -64,7 +68,7 @@ async def run_full_scan():
             "industry":    snap.get('stock_owner', '未知'),
             "near_high":   snap.get('last_price', 0) / max(snap.get('highest52weeks_price', 1), 1),
             "contraction": kfeat.get('contraction_ratio', 0),
-            "is_new":      db.is_new_signal(code),
+            "is_new":      True,
             **pat,
         }
         results.append(r)
