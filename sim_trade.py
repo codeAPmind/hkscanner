@@ -1,4 +1,4 @@
-"""工作日 ~14:10 模拟买卖：先平满 10 个交易日的仓，再买上一交易日 18:20 扫描结果。
+"""工作日 ~14:10 模拟买卖：先按布林中轨/到期平仓，再买上一交易日扫描结果。
 
 下单走 YiDong HKFutuExecutor（OpenD 11112 / SIMULATE / 8268501）。
 成交后写入 YiDong 共享持仓表 channel=HKSCANNER，避免次日 recover / 15:55 EOD 抢平。
@@ -23,9 +23,9 @@ if str(YIDONG) not in sys.path:
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config import EXIT_CONFIG, FEISHU_WEBHOOK_SUMMARY, TRADE_CONFIG  # noqa: E402
+from config import EXIT_CONFIG, FEISHU_WEBHOOK_SUMMARY, FILTER_CONFIG, TRADE_CONFIG  # noqa: E402
 from notify.feishu import push_trade_card  # noqa: E402
-from store.paper_db import PaperDB  # noqa: E402
+from store.paper_db import PaperDB, weekdays_inclusive  # noqa: E402
 from store.signal_db import SignalDB  # noqa: E402
 
 CHANNEL = TRADE_CONFIG["channel"]
@@ -70,6 +70,91 @@ def _broker_codes(executor) -> set[str]:
         return set()
 
 
+def _prior_sma(code: str, period: int = 20) -> float | None:
+    """昨收为止的 SMA。今日未完成 K 线不计入。"""
+    try:
+        from auto_trade.broker_sdk import AuType, KLType, OpenQuoteContext, RET_OK
+        from auto_trade.config import FUTU_HOST, FUTU_PORT
+    except ImportError:
+        return None
+    today = date.today().strftime("%Y-%m-%d")
+    ctx = OpenQuoteContext(host=FUTU_HOST, port=FUTU_PORT)
+    try:
+        ret, data, _ = ctx.request_history_kline(
+            code,
+            ktype=KLType.K_DAY,
+            autype=AuType.QFQ,
+            max_count=period + 8,
+        )
+        if ret != RET_OK or data is None or getattr(data, "empty", True):
+            return None
+        closes = []
+        for _, row in data.iterrows():
+            raw = row.get("time_key", row.get("date_time", row.get("date", "")))
+            dt = str(raw)[:10]
+            if not dt or dt >= today:
+                continue
+            px = float(row.get("close", 0) or 0)
+            if px > 0:
+                closes.append(px)
+        if len(closes) < period:
+            return None
+        return sum(closes[-period:]) / period
+    except Exception as e:
+        print(f"[trade] sma {code} failed: {e}")
+        return None
+    finally:
+        ctx.close()
+
+
+def _entry_open(snap: dict) -> float:
+    opn = float(snap.get("open_price", 0) or 0)
+    last = float(snap.get("last_price", 0) or 0)
+    return opn if opn > 0 else last
+
+
+def too_extended(code: str, px: float) -> tuple[bool, str]:
+    """次日开盘相对昨收 SMA20 超过阈值则不买。"""
+    cap = FILTER_CONFIG.get("max_ext_sma20")
+    if cap is None or px <= 0:
+        return False, ""
+    period = int(EXIT_CONFIG.get("bb_period") or 20)
+    mid = _prior_sma(code, period)
+    if not mid:
+        return True, "无昨收均线，跳过"
+    ext = px / mid - 1.0
+    if ext > cap:
+        return True, f"过热 开盘相对中轨 {ext:+.0%} > +{cap:.0%} (px={px:.3f} mid={mid:.3f})"
+    return False, f"距中轨 {ext:+.0%}"
+
+
+def collect_due(paper: PaperDB, today: date, last_px: dict[str, float] | None = None) -> list[dict]:
+    hold_days = int(TRADE_CONFIG["hold_max_days"] or EXIT_CONFIG["hold_max_days"])
+    mode = EXIT_CONFIG.get("exit_mode") or "time"
+    period = int(EXIT_CONFIG.get("bb_period") or 20)
+    out = []
+    for pos in paper.open_positions():
+        try:
+            entry = date.fromisoformat(pos["entry_date"])
+        except (TypeError, ValueError):
+            continue
+        held = weekdays_inclusive(entry, today)
+        reason = None
+        if mode == "bb_mid" and last_px is not None:
+            mid = _prior_sma(pos["code"], period)
+            px = last_px.get(pos["code"])
+            if mid and px and px <= mid:
+                reason = f"BB_MID last={px:.3f} mid={mid:.3f}"
+        if held >= hold_days:
+            reason = reason or "MAX_HOLD"
+        if reason:
+            row = dict(pos)
+            row["held_days"] = held
+            row["exit_reason"] = reason
+            out.append(row)
+    return out
+
+
 def run(dry_run: bool = False) -> None:
     today = date.today()
     today_s = today.strftime("%Y-%m-%d")
@@ -83,7 +168,7 @@ def run(dry_run: bool = False) -> None:
     os.environ.setdefault("HKSCANNER_PAPER_DB", str(paper.path))
     sigdb = SignalDB(str(ROOT / "store" / "signals.db"))
 
-    due = paper.due_exits(today, hold_days)
+    due = paper.due_exits(today, hold_days) if (EXIT_CONFIG.get("exit_mode") or "time") != "bb_mid" else collect_due(paper, today)
     scan_date = sigdb.latest_scan_before(today_s)
     signals = sigdb.signals_on(scan_date) if scan_date else []
     if scan_date:
@@ -131,6 +216,11 @@ def run(dry_run: bool = False) -> None:
     executor = HKFutuExecutor()
     try:
         occupied = _broker_codes(executor)
+        last_px = {}
+        for pos in paper.open_positions():
+            snap = executor.get_snapshot(pos["code"])
+            last_px[pos["code"]] = _ref_sell(snap)
+        due = collect_due(paper, today, last_px)
 
         # 1) 先卖到期仓，腾槽位
         sell_fills: dict[str, tuple] = {}
@@ -156,7 +246,7 @@ def run(dry_run: bool = False) -> None:
 
             oid = executor.place_sell_order(
                 code, qty, ref,
-                purpose="TIME_EXIT",
+                purpose="BB_MID" if "BB_MID" in str(pos.get("exit_reason", "")) else "TIME_EXIT",
                 slippage=-0.005,
                 on_fill=_on_sell,
                 channel=CHANNEL,
@@ -188,6 +278,12 @@ def run(dry_run: bool = False) -> None:
                 print(f"[trade] skip buy {code}: halted")
                 continue
             ref = _ref_buy(snap)
+            open_px = _entry_open(snap)
+            skip, why = too_extended(code, open_px)
+            if skip:
+                print(f"[trade] skip buy {code}: {why}")
+                lines.append(f"跳过 {code}：{why}")
+                continue
             lot = int(snap.get("lot_size", 100) or 100)
             qty = _lot_qty(slot_hkd, ref, lot)
             if qty <= 0:
@@ -223,9 +319,9 @@ def run(dry_run: bool = False) -> None:
             buy_orders.append((code, oid))
             free -= 1
             held.add(code)
-            print(f"[trade] BUY {code} qty={qty} ref={ref:.3f} order={oid}")
+            print(f"[trade] BUY {code} qty={qty} ref={ref:.3f} order={oid} {why}")
             lines.append(
-                f"买 {s['name']} {code} qty={qty} 参考 {ref:.3f} "
+                f"买 {s['name']} {code} qty={qty} 参考 {ref:.3f} {why} "
                 f"得分{s['score']} 信号{s['scan_date']} 单号 {oid or '失败'}"
             )
 

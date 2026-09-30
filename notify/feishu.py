@@ -7,7 +7,7 @@ try:
 except ImportError:
     httpx = None
 
-from config import EXIT_CONFIG
+from config import EXIT_CONFIG, FILTER_CONFIG
 from engine.exits import describe_exit_rules
 
 
@@ -46,7 +46,7 @@ def build_summary_card(results: list, scan_date: str, total: int) -> dict:
                     "content": "\n".join(lines) or "今日无满足条件标的"}},
                 {"tag": "hr"},
                 {"tag": "div", "text": {"tag": "lark_md",
-                    "content": "**出场** 次日开盘买，第 10 个交易日收盘卖"}},
+                    "content": "**出场**\n" + describe_exit_rules(EXIT_CONFIG, FILTER_CONFIG)}},
                 {"tag": "note", "elements": [{"tag": "plain_text",
                     "content": "⚠ 技术形态识别，不构成投资建议。"}]}
             ]
@@ -60,6 +60,10 @@ def build_detail_card(r: dict) -> dict:
     tpl = "green" if r['score'] >= 75 else "orange" if r['score'] >= 55 else "red"
     name = r['name']
     code = r['code'].replace('HK.', '')
+    r1 = r.get("ret_1m")
+    r1_txt = "—" if r1 is None else f"{r1:+.1%}"
+    ext = r.get("ext_sma20")
+    ext_txt = "—" if ext is None else f"{ext:+.0%}"
     return {
         "msg_type": "interactive",
         "card": {
@@ -74,6 +78,8 @@ def build_detail_card(r: dict) -> dict:
                     {"is_short": True, "text": {"tag": "lark_md", "content": f"**量比**\n{r['vol_ratio']}"}},
                     {"is_short": True, "text": {"tag": "lark_md", "content": f"**换手率**\n{r['turnover']:.2f}%"}},
                     {"is_short": True, "text": {"tag": "lark_md", "content": f"**形态得分**\n{r['score']}/100"}},
+                    {"is_short": True, "text": {"tag": "lark_md", "content": f"**近1月**\n{r1_txt}"}},
+                    {"is_short": True, "text": {"tag": "lark_md", "content": f"**距中轨**\n{ext_txt}"}},
                 ]},
                 {"tag": "hr"},
                 {"tag": "div", "text": {"tag": "lark_md", "content": f"**信号明细**\n{signals_md}"}},
@@ -81,7 +87,7 @@ def build_detail_card(r: dict) -> dict:
                 {"tag": "div", "text": {"tag": "lark_md", "content": f"**风险提示**\n{risk_md}"}},
                 {"tag": "hr"},
                 {"tag": "div", "text": {"tag": "lark_md",
-                    "content": f"**出场规则**\n{describe_exit_rules(EXIT_CONFIG)}"}},
+                    "content": f"**出场规则**\n{describe_exit_rules(EXIT_CONFIG, FILTER_CONFIG)}"}},
                 {"tag": "hr"},
                 {"tag": "div", "text": {"tag": "lark_md", "content": f"**AI 事件分析**\n{r.get('ai_analysis', '—')}"}},
             ]

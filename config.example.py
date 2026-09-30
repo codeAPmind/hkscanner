@@ -14,26 +14,34 @@ FUTU_PORT = 11111
 FEISHU_WEBHOOK_SUMMARY = os.getenv("FEISHU_WEBHOOK_SUMMARY", "")
 FEISHU_WEBHOOK_DETAIL = os.getenv("FEISHU_WEBHOOK_DETAIL", "")
 
-# 初筛条件（快照阶段）
-# 量比[2,4]、市值[20亿,50亿) 对齐复盘甜区（约 26 笔，5 日胜率 ~77%）
+# 初筛：量比[2,4]、市值[5亿,50亿)。
+# 过热不买：收盘/次日开盘相对昨收 SMA20 不超过 +40%。
 FILTER_CONFIG = {
     "min_change_rate": 8.0,
     "min_vol_ratio": 2.0,
     "max_vol_ratio": 4.0,
     "min_decline_from_high": 0.35,
     "min_near_high_ratio": 0.75,
-    "min_market_cap": 20e8,
+    "min_market_cap": 5e8,
     "max_market_cap": 50e8,
     "min_score": 60,
     "max_results": 3,
-    # 按 10 个交易日持仓去重，日历 14 天覆盖周末
-    "signal_cooldown_days": 14,
+    # 最多持 20 个交易日，日历 28 天覆盖周末
+    "signal_cooldown_days": 28,
+    # K 线硬过滤（快照初筛之后）。近 1 月=截至昨收的 21 日收益。
+    "min_ret_1m": 0.08,
+    "max_ret_1m": None,
+    "min_contraction_ratio": None,
+    "min_ret_12_1": None,
+    "max_ext_sma20": 0.40,
 }
 
-# 出场：次日开盘买，第 10 个交易日收盘卖。棘轮/固定回撤在这组样本上更差。
+# 出场：现价回到 20 日均线（昨收 SMA，布林中轨）；最多拿 20 个交易日。
 EXIT_CONFIG = {
+    "exit_mode": "bb_mid",
+    "bb_period": 20,
     "hard_stop_pct": None,
-    "hold_max_days": 10,
+    "hold_max_days": 20,
     "ratchet_tiers": [],
 }
 

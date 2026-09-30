@@ -14,8 +14,8 @@ import yfinance as yf
 
 SIGNALS_DB = Path("/Users/openclaw/openclaw_workspace/hkscanner/store/signals.db")
 OUT = Path("/Users/openclaw/openclaw_workspace/hkscanner/store/backtest_klines.json")
-START = "2026-05-01"
-END = "2026-09-25"
+START = "2025-08-01"
+END = "2026-09-30"
 BATCH = 40
 SLEEP = 1.0
 HSI = "^HSI"
@@ -79,7 +79,12 @@ def parse_batch(df, syms: list[str]) -> dict[str, list[dict]]:
 def main():
     cached = json.loads(OUT.read_text()) if OUT.exists() else {}
     codes = load_codes()
-    missing = [c for c in codes if c not in cached or len(cached[c]) < 40]
+    min_bars = 200
+    missing = [
+        c for c in codes
+        if c not in cached or len(cached[c]) < min_bars
+        or cached[c][0]["date"] > "2025-09-15"
+    ]
     print(f"signals {len(codes)} unique, missing {len(missing)}, cached {len(cached)}")
 
     if HSI not in cached:

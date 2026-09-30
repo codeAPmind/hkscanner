@@ -9,6 +9,7 @@ from data.kline_fetcher    import fetch_klines_for_candidates
 from data.kline_cache      import KlineCache
 from engine.preprocess     import calc_kline_features
 from engine.pattern_scorer import score_pattern
+from engine.filter         import pass_kline_filter
 from ai.claude_analyzer    import analyze_batch
 from notify.feishu         import push_results
 from store.signal_db       import SignalDB
@@ -45,13 +46,15 @@ async def run_full_scan():
     for _, snap_row in cand_df.iterrows():
         code  = snap_row['code']
         kfeat = calc_kline_features(kline_map.get(code))
+        if not pass_kline_filter(kfeat, FILTER_CONFIG):
+            continue
         snap  = snap_row.to_dict()
         pat   = score_pattern(snap, kfeat)
 
         if pat['score'] < FILTER_CONFIG['min_score']:
             continue
 
-        # 10 日持仓假设：冷却期内同一标的不再推，避免把一波行情算成多笔
+        # 持仓期内同一标的不再推
         if not db.is_new_signal(code, FILTER_CONFIG['signal_cooldown_days']):
             continue
 
@@ -68,6 +71,11 @@ async def run_full_scan():
             "industry":    snap.get('stock_owner', '未知'),
             "near_high":   snap.get('last_price', 0) / max(snap.get('highest52weeks_price', 1), 1),
             "contraction": kfeat.get('contraction_ratio', 0),
+            "contraction_pre": kfeat.get('contraction_pre', 0),
+            "ret_1m":      kfeat.get('ret_1m'),
+            "ret_12_1":    kfeat.get('ret_12_1'),
+            "sma20":       kfeat.get('sma20'),
+            "ext_sma20":   kfeat.get('ext_sma20'),
             "is_new":      True,
             **pat,
         }
