@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -76,6 +77,45 @@ def parse_batch(df, syms: list[str]) -> dict[str, list[dict]]:
     return out
 
 
+def _end_exclusive() -> str:
+    return (date.today() + timedelta(days=1)).isoformat()
+
+
+def refresh_tails(max_age_days: int = 7) -> None:
+    """补最近缺的日线。已有长历史的票整段重拉，避免尾部停在旧的 END。"""
+    cached = json.loads(OUT.read_text()) if OUT.exists() else {}
+    codes = load_codes()
+    cutoff = (date.today() - timedelta(days=max_age_days)).isoformat()
+    stale = []
+    for c in codes:
+        rows = cached.get(c) or []
+        if (len(rows) < 200 or rows[0]["date"] > "2025-09-15"
+                or rows[-1]["date"] < cutoff):
+            stale.append(c)
+    print(f"refresh tails: {len(stale)}/{len(codes)} stale (last bar < {cutoff})")
+    if not stale and HSI in cached:
+        return
+    syms = [futu_to_yf(c) for c in stale]
+    if HSI not in cached or not cached[HSI] or cached[HSI][-1]["date"] < cutoff:
+        syms.append(HSI)
+    end = _end_exclusive()
+    for bi, chunk in enumerate(_batched(syms, BATCH), 1):
+        print(f"batch {bi} size={len(chunk)} end={end}")
+        try:
+            df = yf.download(
+                chunk, start=START, end=end, interval="1d",
+                auto_adjust=False, progress=False, threads=True, group_by="ticker",
+            )
+        except Exception as e:
+            print(f"  FAIL {e}")
+            time.sleep(SLEEP * 4)
+            continue
+        cached.update(parse_batch(df, chunk))
+        OUT.write_text(json.dumps(cached))
+        time.sleep(SLEEP)
+    print(f"saved {len(cached)} keys -> {OUT}")
+
+
 def main():
     cached = json.loads(OUT.read_text()) if OUT.exists() else {}
     codes = load_codes()
@@ -99,7 +139,7 @@ def main():
             df = yf.download(
                 chunk,
                 start=START,
-                end=END,
+                end=_end_exclusive(),
                 interval="1d",
                 auto_adjust=False,
                 progress=False,
