@@ -1,13 +1,13 @@
 # hkscanner
 
-港股扫描器：通过 Futu OpenD 拉取行情，初筛 + K 线形态打分，可选 DeepSeek 分析，飞书推送结果。工作日 14:10 用 YiDong 模拟账户按「次日买、持 10 日」下单。
+港股扫描器：通过 Futu OpenD 拉取行情，初筛 + K 线形态打分，可选 DeepSeek 分析，飞书推送结果。工作日 14:10 用 YiDong 执行器下单（`.env` 里 `HKSCANNER_TRADE_ENV=REAL` 为实盘）。
 
 ## 环境
 
 - Python 3.10+
 - [Futu OpenD](https://www.futunn.com/download/openAPI) 本地运行
 - 复制 `config.example.py` 为 `config.py` 并填写密钥
-- 买卖不写券商密码：`hkscanner_trade_run.sh` 会 source `YiDong_AutoTrader_H/.env`（`FUTU_PORT=11112`、`HK_TRADE_ENV=SIMULATE`）
+- 买卖不写券商密码：`hkscanner_trade_run.sh` 会 source `YiDong_AutoTrader_H/.env`（OpenD 11112），再用 `HKSCANNER_TRADE_ENV` 切仿真/实盘
 
 ## 安装
 

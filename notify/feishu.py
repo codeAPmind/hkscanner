@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import urllib.request
 
 try:
@@ -107,18 +108,20 @@ async def push_results(results, scan_date, total, webhook_summary, webhook_detai
 def push_trade_card(trade_date: str, body: str, webhook: str) -> None:
     if not webhook:
         return
+    env = os.getenv("HK_TRADE_ENV", "SIMULATE").upper()
+    live = env == "REAL"
     payload = {
         "msg_type": "interactive",
         "card": {
             "header": {
                 "title": {"tag": "plain_text",
-                          "content": f"模拟交易 · {trade_date}"},
-                "template": "turquoise",
+                          "content": f"{'实盘' if live else '模拟'}交易 · {trade_date}"},
+                "template": "red" if live else "turquoise",
             },
             "elements": [
                 {"tag": "div", "text": {"tag": "lark_md", "content": body}},
                 {"tag": "note", "elements": [{"tag": "plain_text",
-                    "content": "Futu SIMULATE · 持 10 个交易日 · 不构成投资建议"}]},
+                    "content": f"Futu {env} · 中轨/最多20日 · 不构成投资建议"}]},
             ],
         },
     }

@@ -48,7 +48,7 @@ EXIT_CONFIG = {
 DEEPSEEK_CONFIG = {
     "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
     "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
-    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
 }
 
 AI_CONFIG = {
@@ -58,8 +58,7 @@ AI_CONFIG = {
     "concurrency": 3,
 }
 
-# 模拟交易：工作日 14:10，复用 YiDong OpenD 11112 + SIMULATE 账户。
-# 券商密码/账户不要写在这里，由 hkscanner_trade_run.sh source YiDong .env。
+# 14:10 买卖：OpenD/密码来自 YiDong .env；仿真/实盘看 HKSCANNER_TRADE_ENV。
 def _env_int(key: str, default: int) -> int:
     v = os.getenv(key, "")
     return int(v) if v.strip() else default
@@ -70,10 +69,11 @@ def _env_float(key: str, default: float) -> float:
     return float(v) if v.strip() else default
 
 
+# .env：HKSCANNER_TRADE_ENV=REAL|SIMULATE，HKSCANNER_FUTU_ACCOUNT_HK=实盘账户ID
 TRADE_CONFIG = {
     "channel": "HKSCANNER",
-    "max_positions": _env_int("HKSCANNER_MAX_POSITIONS", 3),
-    "slot_hkd": _env_float("HKSCANNER_MAX_POSITION_HKD", 15000),
+    "max_positions": _env_int("HKSCANNER_MAX_POSITIONS", 2),
+    "slot_hkd": _env_float("HKSCANNER_MAX_POSITION_HKD", 20000),
     "hold_max_days": EXIT_CONFIG["hold_max_days"],
     "signal_stale_days": 4,
     "fill_wait_sec": 45,

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# hkscanner 模拟买卖（cron 专用）
+# hkscanner 买卖（cron 专用）
 # 工作日 14:10：避开 14:00 hk_anomaly / 14:05 YiDong anomaly-sync。
-# 异动通道 ENTRY_END_MIN=65 → 约 10:35 后不再开新仓；下午 K 线更稳。
-# 券商：source YiDong .env（OpenD 11112 / SIMULATE / FUTU_ACCOUNT_HK）。
+# 券商密码/OpenD 来自 YiDong .env；仿真/实盘由 hkscanner .env 的
+# HKSCANNER_TRADE_ENV 决定，避免把 YiDong 主策略一并切成 REAL。
 set -euo pipefail
 
 PROJECT_DIR="/Users/openclaw/openclaw_workspace/hkscanner"
@@ -20,7 +20,7 @@ mkdir -p "$RUNTIME_DIR"
   echo "[INFO] Trade task start: ${NOW}"
 } >> "$LOG_FILE"
 
-# 先扫码器 webhook，再让 YiDong 券商变量覆盖 FUTU_PORT / HK_TRADE_ENV
+# 先扫码器 webhook，再灌 YiDong 券商变量；最后用 HKSCANNER_* 盖掉环境/账户
 if [ -f "${PROJECT_DIR}/.env" ]; then
   set -a
   # shellcheck disable=SC1091
@@ -32,6 +32,13 @@ if [ -f "${YIDONG_DIR}/.env" ]; then
   # shellcheck disable=SC1091
   source "${YIDONG_DIR}/.env"
   set +a
+fi
+
+if [ -n "${HKSCANNER_TRADE_ENV:-}" ]; then
+  export HK_TRADE_ENV="${HKSCANNER_TRADE_ENV}"
+fi
+if [ -n "${HKSCANNER_FUTU_ACCOUNT_HK:-}" ]; then
+  export FUTU_ACCOUNT_HK="${HKSCANNER_FUTU_ACCOUNT_HK}"
 fi
 
 export PYTHONUNBUFFERED=1

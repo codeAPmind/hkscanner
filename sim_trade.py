@@ -1,6 +1,6 @@
 """工作日 ~14:10 模拟买卖：先按布林中轨/到期平仓，再买上一交易日扫描结果。
 
-下单走 YiDong HKFutuExecutor（OpenD 11112 / SIMULATE / 8268501）。
+下单走 YiDong HKFutuExecutor（OpenD 11112，环境由 HKSCANNER_TRADE_ENV 决定）。
 成交后写入 YiDong 共享持仓表 channel=HKSCANNER，避免次日 recover / 15:55 EOD 抢平。
 """
 from __future__ import annotations
@@ -31,10 +31,16 @@ from store.signal_db import SignalDB  # noqa: E402
 CHANNEL = TRADE_CONFIG["channel"]
 
 
-def _lot_qty(slot_hkd: float, price: float, lot: int) -> int:
+def _lot_qty(slot_hkd: float, price: float, lot: int, max_lot_hkd: float = 80_000) -> int:
+    """槽位向下取整手数；一手贵过槽位时仍买一手（模拟账户有钱）。"""
     if price <= 0 or lot <= 0:
         return 0
-    n_lots = int(slot_hkd // (price * lot))
+    lot_cost = price * lot
+    if lot_cost > max_lot_hkd:
+        return 0
+    n_lots = int(slot_hkd // lot_cost)
+    if n_lots < 1:
+        n_lots = 1
     return n_lots * lot
 
 
@@ -287,8 +293,8 @@ def run(dry_run: bool = False) -> None:
             lot = int(snap.get("lot_size", 100) or 100)
             qty = _lot_qty(slot_hkd, ref, lot)
             if qty <= 0:
-                print(f"[trade] skip buy {code}: cannot afford 1 lot @ {ref} lot={lot}")
-                lines.append(f"跳过 {code}：{slot_hkd:.0f} 买不起一手 @{ref:.3f}")
+                print(f"[trade] skip buy {code}: 1 lot too large @ {ref} lot={lot}")
+                lines.append(f"跳过 {code}：一手约 {ref * lot:.0f} 超过上限")
                 continue
 
             def _on_buy(oid, filled_qty, filled_px, *, _s=s):

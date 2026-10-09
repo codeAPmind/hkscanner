@@ -5,3 +5,5 @@ __pycache__/
 config.py
 store/*.db
 .claude/
+.DS_Store
+store/backtest_klines.json

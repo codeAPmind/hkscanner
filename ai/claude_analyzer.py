@@ -23,11 +23,10 @@ PROMPT = """\
 量比 {vol_ratio} + 今日 +{change:.1f}% 说明什么？主力意图判断？
 
 **2. 事件驱动（最重要）**
-结合 {industry} 行业，近期哪些政策/行业事件/市场主题最可能驱动这次异动？
-给出 2~3 个方向（无需确认是否真实发生，分析逻辑方向即可）。
+结合 {industry} 行业，写 2~3 个可能催化方向。不要编造具体公告、日期或新闻；不确定就写「未见明确催化，偏资金炒作」。
 
 **3. 操作节奏**
-确定性：高/中/低。出场按系统规则：次日开盘买，第 10 个交易日收盘卖。不要另给止盈止损价。
+确定性：高/中/低。出场按系统规则，不要另给止盈止损价。
 
 格式：直接按三个加粗标题输出，不要废话。
 """
@@ -42,6 +41,8 @@ def analyze_stock(info: dict) -> str:
             "model": MODEL,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": AI_CONFIG["max_tokens"],
+            # Flash 默认开思考；这任务是三段短评，关掉以免占掉 max_tokens。
+            "thinking": {"type": "disabled"},
         },
         timeout=60.0,
     )
