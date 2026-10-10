@@ -7,7 +7,7 @@
 - Python 3.10+
 - [Futu OpenD](https://www.futunn.com/download/openAPI) 本地运行
 - 复制 `config.example.py` 为 `config.py` 并填写密钥
-- 买卖不写券商密码：`hkscanner_trade_run.sh` 会 source `YiDong_AutoTrader_H/.env`（OpenD 11112），再用 `HKSCANNER_TRADE_ENV` 切仿真/实盘
+- 买卖只读本项目 `.env`（`HKSCANNER_TRADE_ENV`、实盘账户、OpenD 端口和交易密码）。不读取 YiDong 的 `.env`
 
 ## 安装
 

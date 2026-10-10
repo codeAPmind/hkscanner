@@ -58,7 +58,7 @@ AI_CONFIG = {
     "concurrency": 3,
 }
 
-# 14:10 买卖：OpenD/密码来自 YiDong .env；仿真/实盘看 HKSCANNER_TRADE_ENV。
+# 14:10 买卖只读本项目 .env，不读 YiDong .env。
 def _env_int(key: str, default: int) -> int:
     v = os.getenv(key, "")
     return int(v) if v.strip() else default
@@ -69,7 +69,7 @@ def _env_float(key: str, default: float) -> float:
     return float(v) if v.strip() else default
 
 
-# .env：HKSCANNER_TRADE_ENV=REAL|SIMULATE，HKSCANNER_FUTU_ACCOUNT_HK=实盘账户ID
+# .env：HKSCANNER_TRADE_ENV、HKSCANNER_FUTU_ACCOUNT_HK、FUTU_PORT、FUTU_TRADE_PWD_MD5
 TRADE_CONFIG = {
     "channel": "HKSCANNER",
     "max_positions": _env_int("HKSCANNER_MAX_POSITIONS", 2),

@@ -1,6 +1,6 @@
 """工作日 ~14:10 模拟买卖：先按布林中轨/到期平仓，再买上一交易日扫描结果。
 
-下单走 YiDong HKFutuExecutor（OpenD 11112，环境由 HKSCANNER_TRADE_ENV 决定）。
+下单走 YiDong HKFutuExecutor。账户和环境只来自本项目 .env 的 HKSCANNER_*。
 成交后写入 YiDong 共享持仓表 channel=HKSCANNER，避免次日 recover / 15:55 EOD 抢平。
 """
 from __future__ import annotations
