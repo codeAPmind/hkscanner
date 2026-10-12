@@ -9,7 +9,7 @@ import argparse
 import os
 import sys
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -83,26 +83,31 @@ def _prior_sma(code: str, period: int = 20) -> float | None:
         from auto_trade.config import FUTU_HOST, FUTU_PORT
     except ImportError:
         return None
-    today = date.today().strftime("%Y-%m-%d")
+    today_d = date.today()
+    today = today_d.strftime("%Y-%m-%d")
+    # OpenD 从 start 往后截 max_count。窗口必须盖住最近 period 根，不能再从旧页开头截。
+    start = (today_d - timedelta(days=max(period * 4, 90))).strftime("%Y-%m-%d")
     ctx = OpenQuoteContext(host=FUTU_HOST, port=FUTU_PORT)
     try:
         ret, data, _ = ctx.request_history_kline(
             code,
+            start=start,
+            end=today,
             ktype=KLType.K_DAY,
             autype=AuType.QFQ,
-            max_count=period + 8,
+            max_count=max(period * 4, 120),
         )
         if ret != RET_OK or data is None or getattr(data, "empty", True):
             return None
-        closes = []
+        bars = []
         for _, row in data.iterrows():
             raw = row.get("time_key", row.get("date_time", row.get("date", "")))
             dt = str(raw)[:10]
-            if not dt or dt >= today:
-                continue
             px = float(row.get("close", 0) or 0)
-            if px > 0:
-                closes.append(px)
+            if dt and dt < today and px > 0:
+                bars.append((dt, px))
+        bars.sort()
+        closes = [px for _, px in bars]
         if len(closes) < period:
             return None
         return sum(closes[-period:]) / period
